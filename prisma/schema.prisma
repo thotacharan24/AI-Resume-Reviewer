@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// User table (managed by Supabase Auth, but we store some user data)
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  avatar    String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  profile      Profile?
+  reviews      Review[]
+  subscriptions Subscription[]
+  reviewUsages  ReviewUsage[]
+}
+
+// User profile/settings
+model Profile {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme     String     @default("system") // "light", "dark", "system"
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// Resume reviews
+model Review {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  resumeText      String   @db.Text
+  jobDescription  String   @db.Text
+  jobTitle        String?
+  
+  // AI Analysis Results
+  atsScore        Int?     // 0-100
+  summary         String?  @db.Text
+  strengths       String[] @default([]) // JSON array stored as text
+  weaknesses      String[] @default([]) // JSON array
+  missingSkills   String[] @default([]) // JSON array
+  matchedSkills   String[] @default([]) // JSON array
+  grammarSuggestions String? @db.Text
+  improvedBullets String[] @default([]) // JSON array
+  recommendation  String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Subscription tracking
+model Subscription {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  plan                  String   @default("free") // "free", "pro"
+  status                String   @default("active") // "active", "canceled", "past_due"
+  
+  // Stripe integration
+  stripeCustomerId      String?  @unique
+  stripeSubscriptionId  String?  @unique
+  stripeProductId       String?
+  stripePriceId         String?
+  
+  // Subscription dates
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  canceledAt            DateTime?
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([stripeCustomerId])
+}
+
+// Daily review usage tracking (for rate limiting)
+model ReviewUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  date      DateTime @default(now())
+  count     Int      @default(0) // Number of reviews done on this date
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+}
